@@ -48,13 +48,23 @@ type CardEffect = {
 };
 
 ```
-#### Game State and Player Story Nodes
-- We need a way to store story information, for when players leave and exit the game. We also 
+### Game State and Player Story Nodes
+- We need a way to store story information, for when players leave and exit the gam.
+- We also want to store players inventory. 
+- Story Nodes contain AI generated story content. When a player enters their choice into the text box, AI will generate the content for the next story node, and the game will progress. 
+- Boss state defines whether or not the player is in a boss fight.
 
 ```typescript
+type Game = {
+  description: string;
+  player: Player;
+  theme: string;
+}
 type GameState = {
   currentStory: StoryNode;
+  player?: Player;
   playerState: PlayerState;
+  boss?: Boss;
   bossState?: BossState;
   inventory: Card[];
 };
@@ -62,24 +72,19 @@ type GameState = {
 type StoryNode = {
   id: string;
   content: string;
-  choices: Choice[];
-  items?: Item[];
 };
 
-type Choice = {
-  id: string;
-  text: string;
-  nextNodeId: string;
-  consequences?: GameStateChange[];
-};
 ```
 
+### Player and Boss States
+- Boss type defines a boss, with abilities, health, and an image. 
+- Player type defines a player, along with all the attributes a player needs
+- Boss and Player states contain current health and effects granted by cards
 
-// Battle Types
-type BossState = {
+```typescript
+type Boss = {
   id: string;
   name: string;
-  health: number;
   maxHealth: number;
   imageUrl: string;
   abilities: BossAbility[];
@@ -90,17 +95,45 @@ type BossAbility = {
   damage: number;
   effects: CardEffect[];
 };
+
+
+type Player = {
+  id: string;
+  name: string;
+  description: string;
+  maxHealth: number;
+  inventory: Cards[];
+  effects: CardEffect[];
+  imageUrl: string;
+}
+
+type PlayerState = {
+  health: number;
+  activeCard: Card[];
+  
+};
+
+type BossState = {
+  health: number;
+  effects: CardEffect[];
+}
 ```
 
+
 ### API Interfaces
+- These interfaces define how the frontend interacts with the API. 
+- The authentication will be handled on the backend by a 3rd party provider, but we still need to pass the data.
+- GameAPI handles generating the next story node and saving progress.
+- The card API handles retrieving, upgrading, and storing cards. 
+- Start game retrieves a new game, and takes user input game description.
+- createPlayer retreives a new player, and takes user input player description and name
 
 ```typescript
 interface GameAPI {
-  startGame(): Promise<GameState>;
-  makeChoice(choiceId: string): Promise<GameState>;
-  useCard(cardId: string, targetId?: string): Promise<GameState>;
-  collectItem(itemId: string): Promise<Card>;
+  startGame( gameDescription: string): Promise<Game>;
   saveProgress(gameState: GameState): Promise<void>;
+  getNextNode(storyNode: StoryNode, choice: string): Promise<StoryNode>;
+  createPlayer(playerDescription: string, playerName: string): Promise<Player>;
 }
 
 interface AuthAPI {
@@ -114,6 +147,8 @@ interface CardAPI {
   getCards(): Promise<Card[]>;
   upgradeCard(cardId: string): Promise<Card>;
   getCardDetails(cardId: string): Promise<Card>;
+  useCard(cardId: string, targetId?: string): Promise<GameState>;
+  collectCard(itemId: string): Promise<Card>;
 }
 ```
 
@@ -121,35 +156,13 @@ interface CardAPI {
 
 ### Core Components
 
-#### CardComponent
-```typescript
-interface CardProps {
-  card: Card;
-  isPlayable: boolean;
-  onUse?: (cardId: string) => void;
-  className?: string;
-}
-
-const Card: React.FC<CardProps> = ({ card, isPlayable, onUse, className }) => {
-  // Component implementation
-};
-```
-
-#### StoryDisplay
-```typescript
-interface StoryDisplayProps {
-  node: StoryNode;
-  onChoiceSelected: (choiceId: string) => void;
-}
-
-const StoryDisplay: React.FC<StoryDisplayProps> = ({ node, onChoiceSelected }) => {
-  // Component implementation
-};
-```
 
 #### BattleInterface
+
 ```typescript
 interface BattleInterfaceProps {
+  player: Player;
+  boss: Boss;
   playerState: PlayerState;
   bossState: BossState;
   availableCards: Card[];
@@ -157,6 +170,8 @@ interface BattleInterfaceProps {
 }
 
 const BattleInterface: React.FC<BattleInterfaceProps> = ({
+  player, 
+  boss,
   playerState,
   bossState,
   availableCards,
@@ -167,6 +182,7 @@ const BattleInterface: React.FC<BattleInterfaceProps> = ({
 ```
 
 #### Inventory
+- We will use a PrimeReact prebuilt card component to display the card. We will use the Primereact gallery component to actually display the full inventory.
 ```typescript
 interface InventoryProps {
   cards: Card[];
@@ -174,151 +190,7 @@ interface InventoryProps {
 }
 
 const Inventory: React.FC<InventoryProps> = ({ cards, onCardSelected }) => {
-  // Component implementation
+  //PrimeReact Gallery
 };
 ```
 
-### Layout Components
-
-#### GameLayout
-```typescript
-interface GameLayoutProps {
-  children: React.ReactNode;
-  showInventory?: boolean;
-  showStats?: boolean;
-}
-
-const GameLayout: React.FC<GameLayoutProps> = ({
-  children,
-  showInventory,
-  showStats,
-}) => {
-  // Component implementation
-};
-```
-
-## Pages
-
-### HomePage
-```typescript
-const HomePage: React.FC = () => {
-  // Implementation for landing page
-};
-```
-
-### GamePage
-```typescript
-const GamePage: React.FC = () => {
-  // Main game implementation
-};
-```
-
-### BattlePage
-```typescript
-const BattlePage: React.FC = () => {
-  // Battle system implementation
-};
-```
-
-### InventoryPage
-```typescript
-const InventoryPage: React.FC = () => {
-  // Card collection and management implementation
-};
-```
-
-### AuthPages
-```typescript
-const LoginPage: React.FC = () => {
-  // Login implementation
-};
-
-const RegisterPage: React.FC = () => {
-  // Registration implementation
-};
-```
-
-## State Management
-
-### Game Context
-```typescript
-interface GameContextType {
-  gameState: GameState;
-  dispatch: React.Dispatch<GameAction>;
-}
-
-type GameAction =
-  | { type: 'UPDATE_STORY'; payload: StoryNode }
-  | { type: 'USE_CARD'; payload: { cardId: string; targetId?: string } }
-  | { type: 'COLLECT_ITEM'; payload: Item }
-  | { type: 'UPDATE_PLAYER_STATE'; payload: Partial<PlayerState> };
-
-const GameContext = React.createContext<GameContextType | undefined>(undefined);
-```
-
-### Auth Context
-```typescript
-interface AuthContextType {
-  user: User | null;
-  login: (credentials: LoginCredentials) => Promise<void>;
-  logout: () => Promise<void>;
-}
-
-const AuthContext = React.createContext<AuthContextType | undefined>(undefined);
-```
-
-## API Integration
-
-### API Client
-```typescript
-class APIClient {
-  private baseUrl: string;
-  private token: string | null;
-
-  constructor(baseUrl: string) {
-    this.baseUrl = baseUrl;
-    this.token = null;
-  }
-
-  setToken(token: string) {
-    this.token = token;
-  }
-
-  async get<T>(endpoint: string): Promise<T> {
-    // Implementation
-  }
-
-  async post<T>(endpoint: string, data: any): Promise<T> {
-    // Implementation
-  }
-
-  async put<T>(endpoint: string, data: any): Promise<T> {
-    // Implementation
-  }
-
-  async delete(endpoint: string): Promise<void> {
-    // Implementation
-  }
-}
-```
-
-### API Hooks
-```typescript
-function useGame() {
-  const [gameState, setGameState] = useState<GameState | null>(null);
-
-  // Implementation
-}
-
-function useCards() {
-  const [cards, setCards] = useState<Card[]>([]);
-
-  // Implementation
-}
-
-function useBattle() {
-  const [battleState, setBattleState] = useState<BattleState | null>(null);
-
-  // Implementation
-}
-```
