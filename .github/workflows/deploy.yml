@@ -1,0 +1,66 @@
+name: Deploy Application
+
+on:
+  push:
+    branches:
+      - main  # Trigger deployment on push to main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Step 1: Checkout the code
+      - name: Checkout code
+        uses: actions/checkout@v2
+
+      # Step 2: Set up Node.js (for React)
+      - name: Set up Node.js
+        uses: actions/setup-node@v2
+        with:
+          node-version: '22'
+
+      # Step 3: Install dependencies and build React app
+      - name: Install React dependencies and build
+        env:
+          VITE_SUPABASE_URL: https://wkgkofzrwogenfxjrfbq.supabase.co
+          VITE_SUPABASE_ANON_KEY: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndrZ2tvZnpyd29nZW5meGpyZmJxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA1ODcyOTksImV4cCI6MjA1NjE2MzI5OX0.b7jWXku8zJEW4gockR5Lk4yXDxqjsVq8vj6kTROcDes
+        run: |
+          cd last-game-frontend
+          npm install
+          npm run build
+
+      # Step 4: Set up Go (for the Go backend)
+      - name: Set up Go
+        uses: actions/setup-go@v3
+        with:
+          go-version: '1.23.2'
+
+      # Step 5: Build Go backend
+      - name: Build Go backend
+        run: |
+          cd backend
+          go build -o last-game-backend cmd/api/main.go
+
+      # Step 6: Deploy to server
+      - name: Deploy to server
+        env:
+          SERVER_USER: ubuntu
+          SERVER_IP: 13.58.239.54
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: |
+          echo "$PRIVATE_KEY" > github-ec2.pem && chmod 600 github-ec2.pem
+
+          # Remove old frontend code
+          ssh -o StrictHostKeyChecking=no -i github-ec2.pem $SERVER_USER@$SERVER_IP 'rm -rf /var/www/html/*'
+
+          # Copy React build to the server
+          scp -o StrictHostKeyChecking=no -i github-ec2.pem -r last-game-frontend/dist/* $SERVER_USER@$SERVER_IP:/var/www/html
+
+          # Remove old Go binary
+          ssh -o StrictHostKeyChecking=no -i github-ec2.pem $SERVER_USER@$SERVER_IP 'rm ~/last-game-backend'
+
+          # Copy Go binary to the server
+          scp -o StrictHostKeyChecking=no -i github-ec2.pem backend/last-game-backend $SERVER_USER@$SERVER_IP:/home/$SERVER_USER/
+
+          # Restart Go backend service
+          ssh -o StrictHostKeyChecking=no -i github-ec2.pem $SERVER_USER@$SERVER_IP 'sudo systemctl restart last-game-backend'
